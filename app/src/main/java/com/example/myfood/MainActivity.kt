@@ -1,6 +1,7 @@
 package com.example.myfood
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -43,9 +44,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import coil.compose.rememberAsyncImagePainter
 import com.example.myfood.ui.theme.MyFoodTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var mainViewModel : MainViewModel
@@ -54,13 +60,37 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         mainViewModel = ViewModelProvider(this).get(MainViewModel::class)
         mainViewModel.fetchHomeData()
+        initObservers()
         setContent {
+            val controller = rememberNavController()
             MyFoodTheme {
-                HomeScreen(viewModel = mainViewModel)
+                NavHost(modifier =Modifier.fillMaxSize(), navController =  controller, startDestination = if(mainViewModel.firebaseAuth.currentUser!=null) "main" else "login"){
+                    composable("main") {
+                        HomeScreen(mainViewModel)
+                    }
+                    composable("login") {
+                        LoginScreen(mainViewModel, controller)
+                    }
+                    composable("signup") {
+                        SignUpScreen(mainViewModel, controller)
+                    }
+                }
+            }
+        }
+    }
+    fun initObservers(){
+        mainViewModel.viewModelScope.launch {
+            mainViewModel.sharedFlow.collect {
+                when(it){
+                    is FlowData.Toast ->{
+                        Toast.makeText(applicationContext, it.message, Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
     }
 }
+
 
 @Composable
 fun BestSellerItem(baseUrl1: String?, item: HomeMenuItem) {
