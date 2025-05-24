@@ -1,5 +1,7 @@
 package com.example.myfood
 
+import kotlinx.serialization.Serializable
+
 data class HomeData(
     val status :String?,
     val base_image_url :String?,
@@ -23,13 +25,13 @@ data class HomeMenu(
     val recommended : List<HomeMenuItem>,
     val advertise : List<AdvertiseItem>
 )
+@Serializable
 data class  HomeMenuItem(
     val id : Int?,
     val name : String?,
     val price : Float?,
     val currency :String?,
     val image_url :String?,
-    val delivery_time : String?,
     val description : String?,
     val is_veg : Boolean?=false
 )
