@@ -3,7 +3,9 @@ package com.example.myfood
 import android.util.Patterns
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -30,8 +32,13 @@ class MainViewModel : ViewModel() {
     var emailLogin by mutableStateOf("")
     var passwordLogin by mutableStateOf("")
     var emailSignUp by mutableStateOf("")
+    var cartVisible by mutableStateOf(false)
+    var cartMap = mutableStateMapOf<Int, Int>()
+    var total = 0
+    var tax = 0
     var passwordSignUp by mutableStateOf("")
     var favoriteListIds : MutableList<Int> = mutableListOf<Int>()
+    var cartIds : MutableList<Int> = mutableListOf<Int>()
      var _sharedFlow : MutableSharedFlow<FlowData> = MutableSharedFlow<FlowData>(replay = 0)
      var sharedFlow = _sharedFlow.asSharedFlow()
     var menuMap  by mutableStateOf<Map<Int, HomeMenuItem>>(emptyMap())
@@ -146,6 +153,28 @@ class MainViewModel : ViewModel() {
                     favoriteListIds = mutableListOf()
                 }
         }
+        fun fetchCart(){
+            val uid = firebaseAuth.currentUser?.uid ?:""
+            val docRef = db.collection("cart").document(uid)
+            docRef.get().addOnSuccessListener {
+                if(it.exists()){
+                    val favorites = it.get("cartIds") as? List<Int> ?:emptyList()
+                    cartIds = favorites.map { it.toInt() }.toMutableList()
+                    cartIds.forEach {
+                        cartMap[it] =1
+                    }
+                    getMenuItems(cartIds).forEach {
+                        total += (it.price?:0).toInt()
+                    }
+                }
+                else{
+                    cartIds = mutableListOf()
+                }
+            }
+                .addOnFailureListener {
+                    cartIds = mutableListOf()
+                }
+        }
 
         fun removeFavorites(id : Int){
             val uid = firebaseAuth.currentUser?.uid ?:""
@@ -158,6 +187,37 @@ class MainViewModel : ViewModel() {
                             viewModelScope.launch {
                                 _sharedFlow.emit(
                                     FlowData.Toast("Removed to favorites")
+                                )
+                            }
+                        }
+                        .addOnFailureListener {exception->
+                            viewModelScope.launch {
+                                _sharedFlow.emit(
+                                    FlowData.Toast(" Failure ${exception?.message}")
+                                )
+                            }
+                        }
+                }
+            }
+                .addOnFailureListener {exception->
+                    viewModelScope.launch {
+                        _sharedFlow.emit(
+                            FlowData.Toast(" Failure ${exception?.message}")
+                        )
+                    }
+                }
+        }
+        fun removeCart(id : Int){
+            val uid = firebaseAuth.currentUser?.uid ?:""
+            val docRef = db.collection("cart").document(uid)
+            docRef.get().addOnSuccessListener {
+                if(it.exists()){
+                    docRef.update("cartIds", FieldValue.arrayRemove(id))
+                        .addOnSuccessListener {
+                            fetchCart()
+                            viewModelScope.launch {
+                                _sharedFlow.emit(
+                                    FlowData.Toast("Removed from Cart")
                                 )
                             }
                         }
@@ -209,6 +269,57 @@ class MainViewModel : ViewModel() {
                             viewModelScope.launch {
                                 _sharedFlow.emit(
                                     FlowData.Toast("Added to favorites")
+                                )
+                            }
+                        }
+                        .addOnFailureListener {exception->
+                            viewModelScope.launch {
+                                _sharedFlow.emit(
+                                    FlowData.Toast(" Failure ${exception?.message}")
+                                )
+                            }
+                        }
+                }
+            }
+                .addOnFailureListener {exception->
+                    viewModelScope.launch {
+                        _sharedFlow.emit(
+                            FlowData.Toast(" Failure ${exception?.message}")
+                        )
+                    }
+                }
+        }
+
+     fun addCart(id : Int){
+            val uid = firebaseAuth.currentUser?.uid ?:""
+            val docRef = db.collection("cart").document(uid)
+
+            docRef.get().addOnSuccessListener {
+                if(it.exists()){
+                    docRef.update("cartIds", FieldValue.arrayUnion(id))
+                        .addOnSuccessListener {
+                            fetchCart()
+                            viewModelScope.launch {
+                                _sharedFlow.emit(
+                                    FlowData.Toast("Added to Cart")
+                                )
+                            }
+                        }
+                        .addOnFailureListener {exception->
+                            viewModelScope.launch {
+                                _sharedFlow.emit(
+                                    FlowData.Toast(" Failure ${exception?.message}")
+                                )
+                            }
+                        }
+                }
+                else{
+                    val favoritesData = hashMapOf("cartIds" to listOf(id))
+                    docRef.set(favoritesData, SetOptions.merge())
+                        .addOnSuccessListener {
+                            viewModelScope.launch {
+                                _sharedFlow.emit(
+                                    FlowData.Toast("Added to Cart")
                                 )
                             }
                         }

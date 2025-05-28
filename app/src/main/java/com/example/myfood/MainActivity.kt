@@ -5,9 +5,16 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,6 +39,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material3.Icon
@@ -44,11 +53,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
@@ -77,6 +90,7 @@ class MainActivity : ComponentActivity() {
         mainViewModel = ViewModelProvider(this).get(MainViewModel::class)
         mainViewModel.fetchHomeData()
         mainViewModel.fetchFavorites()
+        mainViewModel.fetchCart()
         initObservers()
         setContent {
             val controller = rememberNavController()
@@ -116,6 +130,257 @@ class MainActivity : ComponentActivity() {
                     is FlowData.Toast ->{
                         Toast.makeText(applicationContext, it.message, Toast.LENGTH_LONG).show()
                     }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun CartItem(item: HomeMenuItem, baseUrl: String, count: Int,addCount:()->Unit,
+             minusCount:()->Unit) {
+    Row(
+        Modifier.fillMaxWidth().wrapContentHeight()
+            .background(colorResource(R.color.orange_base)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Box(Modifier
+            .padding(16.dp)
+            .size(80.dp).clip(RoundedCornerShape(20.dp))) {
+            Image(
+                rememberAsyncImagePainter(baseUrl +item?.image_url),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds
+            )
+        }
+        Column(Modifier
+            .weight(0.8f)
+        ) {
+
+            Text(
+                item?.name ?:"",
+                Modifier,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                fontSize = 24.sp
+                )
+            Text(
+                "${count.toInt() * (item?.price?:0).toInt()}",
+                Modifier,
+                color = Color.White,
+                fontSize = 20.sp
+            )
+        }
+
+        Row(
+            Modifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ){
+            Box(
+                Modifier
+                    .size(20.dp)
+                    .background(Color.White,CircleShape).clickable{
+                        minusCount()
+                    },
+                contentAlignment = Alignment.Center
+            ){
+                Image(painterResource(R.drawable.minus_icon),
+                    contentDescription = null)
+            }
+            Text(count.toString(),
+                Modifier,
+                color = Color.White,
+                fontSize = 20.sp)
+            Box(
+                Modifier
+                    .size(20.dp)
+                    .background(Color.White,CircleShape)
+                    .clickable{
+                        addCount()
+                    },
+                contentAlignment = Alignment.Center
+            ){
+                Image(painterResource(R.drawable.plus_icon),
+                    contentDescription = null)
+            }
+        }
+    }
+}
+
+@Composable
+fun CartDrawer(viewModel: MainViewModel) {
+    var isEmptyCart = viewModel.cartIds.isEmpty()
+    var cartItems = viewModel.getMenuItems(viewModel.cartIds)
+    var baseUrl = viewModel.data?.value?.base_image_url ?: ""
+    Column(
+        Modifier.fillMaxSize()
+            .clip(RoundedCornerShape(topStart = 100.dp, bottomStart = 100.dp))
+            .background(colorResource(R.color.orange_base))
+            .padding(16.dp)
+            .padding(end = 60.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 10.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painterResource(R.drawable.cart_white_icon),
+                contentDescription = null,
+                Modifier.padding(end = 16.dp)
+            )
+            Text(
+                "Cart", Modifier, color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 30.sp
+            )
+        }
+        Spacer(
+            Modifier.padding(top = 20.dp).height(1.dp).fillMaxWidth()
+                .background(colorResource(R.color.yellow_light))
+        )
+        Text(
+            if (isEmptyCart)
+                "Your Cart is empty"
+            else "You have ${viewModel.cartIds.size ?:0 } items in cart",
+            Modifier.fillMaxWidth().padding(top = 16.dp),
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 24.sp,
+            textAlign = TextAlign.Center
+        )
+        if (isEmptyCart) {
+            Box(
+                Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Image(
+                        painterResource(R.drawable.add_to_cart_icon),
+                        contentDescription = null
+                    )
+                    Text(
+                        "Want To Add Something?", Modifier.fillMaxWidth(),
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            cartItems?.forEach {
+                CartItem(it, baseUrl, viewModel.cartMap[it?.id  ?:0] ?:1,
+                    addCount = {
+                        viewModel.cartMap[it?.id ?:0] = (viewModel.cartMap[it?.id ]?:0) +1
+                        viewModel.total  = viewModel.total + (it.price?:0).toInt()
+                    },
+                    minusCount = {
+                        if(  viewModel.cartMap[it?.id ?:0] == 1){
+                            viewModel.removeCart(it?.id ?:0)
+                            return@CartItem
+                        }
+                        viewModel.cartMap[it?.id ?:0] = (viewModel.cartMap[it?.id ]?:0) -1
+                        viewModel.total -= (it.price ?:0).toInt()
+                    })
+            }
+
+
+            Row(Modifier.padding(top = 20.dp)) {
+                Text(
+                    "SubTotal",
+                    Modifier,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    fontSize = 24.sp
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "$${viewModel.total}",
+                    Modifier,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    fontSize = 24.sp
+                )
+            }
+            Row(Modifier.padding(top = 20.dp)) {
+                Text(
+                    "Tax And Fee",
+                    Modifier,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    fontSize = 24.sp
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "$${viewModel.total * 0.18}",
+                    Modifier,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    fontSize = 24.sp
+                )
+            }
+            Row(Modifier.padding(top = 20.dp)) {
+                Text(
+                    "Delivery",
+                    Modifier,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    fontSize = 24.sp
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "$40.00",
+                    Modifier,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    fontSize = 24.sp
+                )
+            }
+            Spacer(
+                Modifier
+                    .padding(top = 20.dp)
+                    .height(1.dp).fillMaxWidth().background(colorResource(R.color.yellow_light))
+            )
+            Row(Modifier.padding(top = 20.dp)) {
+                Text(
+                    "Total",
+                    Modifier,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    fontSize = 24.sp
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "$ ${(viewModel.total) + (viewModel.total*0.18) + 40}",
+                    Modifier,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    fontSize = 24.sp
+                )
+            }
+            Box(Modifier.fillMaxWidth().wrapContentHeight(), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .padding(top = 20.dp)
+                        .wrapContentHeight()
+                        .background(colorResource(R.color.yellow_base), RoundedCornerShape(20.dp))
+                        .padding(20.dp)
+                ) {
+                    Text(
+                        "Checkout",
+                        Modifier,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colorResource(R.color.orange_base)
+                    )
                 }
             }
         }
@@ -228,7 +493,13 @@ fun PDpage(productData: HomeMenuItem,viewModel: MainViewModel) {
                     Modifier
                         .padding(top = 20.dp)
                         .background(colorResource(R.color.orange_base), RoundedCornerShape(20.dp))
-                        .padding(16.dp),
+                        .padding(16.dp)
+                        .clickable{
+                            if(!viewModel.cartIds.contains(productData?.id)) {
+                                viewModel.addCart(productData?.id ?: 0)
+                            }
+                        }
+                    ,
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -317,25 +588,74 @@ fun FavoritesItem(data: HomeMenuItem, baseUrl1: String?, onProductClick:()->Unit
 }
 
 @Composable
-fun MainScreen(viewModel: MainViewModel,controller: NavController, index : Int){
+fun MainScreen(viewModel: MainViewModel,controller: NavController, index : Int) {
     var currentIndex = remember { mutableStateOf(index) }
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            TopBar()
-        },
-        bottomBar = {
-            BottomBar(){
-                controller.navigate("main/${it}")
-            }
-        }
-    ) { innerPadding ->
-            Column(Modifier.fillMaxSize().padding(innerPadding)){
-                when(currentIndex.value){
-                    0-> HomeScreen(viewModel, controller)
-                    2-> FavoritesScreen(viewModel, controller)
+    val sheetwidth = LocalConfiguration.current.screenWidthDp.dp / 3
+    val offsetX = remember { Animatable(sheetwidth.value) }
+
+    Box {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                TopBar(viewModel)
+            },
+            bottomBar = {
+                BottomBar() {
+                    controller.navigate("main/${it}")
                 }
             }
+        ) { innerPadding ->
+                      Column(Modifier.fillMaxSize().padding(innerPadding)) {
+                when (currentIndex.value) {
+                    0 -> HomeScreen(viewModel, controller)
+                    2 -> FavoritesScreen(viewModel, controller)
+                }
+
+            }
+        }
+
+        AnimatedVisibility(
+            visible = viewModel.cartVisible,
+            modifier = Modifier.fillMaxSize(),
+            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+        ) {
+            Box(
+                Modifier.fillMaxHeight()
+                    .width(sheetwidth)
+                    .offset {
+                        IntOffset(offsetX.value.toInt(), y = 0)
+                    }
+                    .background(Color.Transparent)
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (offsetX.value > sheetwidth.value * 0.5f) {
+                                    viewModel.cartVisible = false
+                                } else {
+                                    viewModel.viewModelScope.launch {
+                                        offsetX.animateTo(0f)
+                                    }
+                                }
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                viewModel.viewModelScope.launch {
+                                    offsetX.snapTo(
+                                        (offsetX.value + dragAmount).coerceIn(
+                                            0f,
+                                            sheetwidth.value
+                                        )
+                                    )
+                                }
+
+                            }
+                        )
+                    }
+            ) {
+                CartDrawer(viewModel)
+            }
+        }
     }
 }
 @Composable
@@ -457,7 +777,7 @@ fun HomeScreen(viewModel: MainViewModel, controller: NavController){
 }
 
 @Composable
-fun TopBar(){
+fun TopBar(viewModel: MainViewModel){
     Column(
         modifier = Modifier
             .background(colorResource(R.color.yellow_base))
@@ -481,8 +801,12 @@ fun TopBar(){
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                icons.forEach {
-                    TopIconItem(it)
+                icons.forEachIndexed { index, it ->
+                    TopIconItem(it){
+                        if(index == 0) {//which  is cart
+                            viewModel.cartVisible = true
+                        }
+                    }
                 }
             }
         }
@@ -562,11 +886,14 @@ fun SearchBox(){
 
 
 @Composable
-fun TopIconItem(i: Int) {
+fun TopIconItem(i: Int,onClick:()->Unit) {
     Box(
         modifier = Modifier
             .size(26.dp)
-            .background(Color(0xffF5F5F5), RoundedCornerShape(12.dp)),
+            .background(Color(0xffF5F5F5), RoundedCornerShape(12.dp))
+            .clickable{
+                onClick()
+            },
         contentAlignment = Alignment.Center
     ){
         Image(
